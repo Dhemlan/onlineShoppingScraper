@@ -3,6 +3,34 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import csv
 
+import sqlite3
+from sqlite3 import Error
+
+
+def create_connection(db_file):
+    conn = None
+    try:
+        conn = sqlite3.connect(db_file)
+        return conn
+    except Error as e:
+        print(e)
+
+    return conn
+
+def get_db_cursor():
+    database = r"onlineShopping.db"
+    conn = create_connection(database)
+
+    try:	
+        cursor = conn.cursor()
+    except Error as e:
+        print(e)
+
+    return cursor
+    
+
+
+
 header = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.82 Safari/537.36'}
 
 with open('wishlist') as f:
@@ -25,22 +53,21 @@ with open('wishlist') as f:
 
 	# Row constants
 	ITEM = 0
-	ITEM_CATEGORY = 1
-	RRP = 2
-	STORE = 3
-	TAG = 4
-	ATTRIBUTE = 5
-	VALUE = 6
-	URL = 7
+	BASE_PRICE = 1
+	STORE = 2
+	TAG = 3
+	ARGS = 4
+	VALUE = 5
+	URL = 6
 
-
-
-	reader = csv.reader(f, delimiter=',', escapechar='\\')
-	for row in reader:
+	cursor = get_db_cursor()
+	cursor.execute("SELECT item.name, basePrice, store, tag, args, value, url FROM stock JOIN item on item.name=item JOIN store on store=store.name")
+	rows = cursor.fetchall()
+	for row in rows:
 		k = requests.get(row[URL], headers = header).text
 		soup = BeautifulSoup(k,'html.parser')
 		tag = '%s' % row[TAG]
-		myDict = {row[ATTRIBUTE]:row[VALUE]}
+		myDict = {row[ARGS]:row[VALUE]}
 		result = soup.findAll(tag, attrs=myDict)
 		prefix = row[ITEM] + " from " + row[STORE]
 		if not result :
@@ -48,8 +75,9 @@ with open('wishlist') as f:
 		else:
 			for node in result:
 				priceFound = ''.join(node.findAll(text=True)).strip('$')
-				discount = round((float(row[RRP]) - float(priceFound)) / float(row[RRP]) * 100, 2)
-				output =prefix + ": $" + str(priceFound) + " - " + str(discount) + "% off (usual price: $" + row[RRP] + ")"
+				discount = round((row[BASE_PRICE] - float(priceFound)) / row[BASE_PRICE] * 100, 2)
+				output = prefix + ": $" + str(priceFound) + " - " + str(discount) + "% off (usual price: $" + str(row[BASE_PRICE]) + ")"
+				#print("test" + output)
 				if (discount > 50):
 					fiftyPlusOff.append(output)
 				elif (discount > 40):
